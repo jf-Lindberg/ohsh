@@ -11,17 +11,23 @@ func main() {
 	for {
 		fmt.Fprint(os.Stdout, "$ ")
 
-		command, err := bufio.NewReader(os.Stdin).ReadString('\n')
+		userInput, err := bufio.NewReader(os.Stdin).ReadString('\n')
 
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "Error reading input:", err)
 			os.Exit(1)
 		}
 
-		if strings.Trim(command, "\n") == "exit 0" {
-			os.Exit(0)
-		}
+		splitInput := strings.Split(userInput, " ")
+		command := strings.Trim(splitInput[0], "\n")
 
-		fmt.Println(command[:len(command)-1] + ": command not found")
+		switch command {
+		case "exit":
+			os.Exit(0)
+		case "echo":
+			fmt.Print(strings.Join(splitInput[1:], " "))
+		default:
+			fmt.Println(command + ": command not found")
+		}
 	}
 }
