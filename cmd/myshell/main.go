@@ -61,7 +61,7 @@ func main() {
 			fmt.Print(strings.Join(args, " "))
 		} else if cmd == "type" && len(args) == 1 {
 			switch args[0] {
-			case "exit", "echo", "type":
+			case "exit", "echo", "type", "pwd":
 				fmt.Printf("%s is a shell builtin", args[0])
 			default:
 				path := os.Getenv("PATH")
@@ -79,18 +79,14 @@ func main() {
 					fmt.Printf("%s not found", args[0])
 				}
 			}
+		} else if cmd == "pwd" {
+			pwd, err := os.Getwd()
+			if err != nil {
+				fmt.Println(err)
+				os.Exit(1)
+			}
+			fmt.Print(pwd)
 		} else {
-			/*path := os.Getenv("PATH")
-			splitPath := strings.Split(path, ":")
-			found := false
-			var foundPath string
-			for _, dir := range splitPath {
-				foundPath, err = findInPath(dir, cmd)
-				if err == nil {
-					found = true
-					break
-				}
-			}*/
 			command := exec.Command(cmd, args...)
 			out, err := command.Output()
 			if err != nil {
