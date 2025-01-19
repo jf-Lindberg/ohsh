@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -79,7 +80,24 @@ func main() {
 				}
 			}
 		} else {
-			fmt.Printf("%s: command not found", input)
+			/*path := os.Getenv("PATH")
+			splitPath := strings.Split(path, ":")
+			found := false
+			var foundPath string
+			for _, dir := range splitPath {
+				foundPath, err = findInPath(dir, cmd)
+				if err == nil {
+					found = true
+					break
+				}
+			}*/
+			command := exec.Command(cmd, args...)
+			out, err := command.Output()
+			if err != nil {
+				fmt.Printf("%s: command not found", input)
+			} else {
+				fmt.Print(strings.Trim(string(out), "\n"))
+			}
 		}
 
 		fmt.Println()
