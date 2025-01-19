@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -36,6 +37,24 @@ func findInPath(path string, name string) (string, error) {
 	return foundPath, nil
 }
 
+func parseArgs(args []string) []string {
+	joined := strings.Join(args, " ")
+	regex := regexp.MustCompile(`'[^']*(?:\s+[^']*)*'(?:'[^']*(?:\s+[^']*)*')*|\S+`)
+	matches := regex.FindAllString(joined, -1)
+	result := make([]string, 0, len(matches))
+
+	for _, match := range matches {
+		if match[0] == '\'' || match[len(match)-1] == '\'' {
+			processed := strings.ReplaceAll(match, "'", "")
+			result = append(result, processed)
+		} else {
+			result = append(result, match)
+		}
+	}
+
+	return result
+}
+
 func main() {
 	for {
 		fmt.Print("$ ")
@@ -49,7 +68,7 @@ func main() {
 		input = strings.TrimRight(input, "\n")
 		args := strings.Split(input, " ")
 		cmd := args[0]
-		args = args[1:]
+		args = parseArgs(args[1:])
 
 		if cmd == "exit" && len(args) == 1 {
 			code, err := strconv.Atoi(args[0])
