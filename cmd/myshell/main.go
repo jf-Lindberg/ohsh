@@ -65,15 +65,84 @@ func main() {
 			return
 		}
 
-		input = strings.TrimRight(input, "\n")
-		args := strings.Split(input, " ")
-		cmd := args[0]
-		args = parseArgs(args[1:])
+		var args []string
+		var inSingleQuote bool
+		var inDoubleQuote bool
+		var sb strings.Builder
+		var ab []string
+		for i := 0; i < len(input); i++ {
+			if !inSingleQuote && !inDoubleQuote {
+				if input[i] == ' ' || input[i] == '\n' {
+					if sb.Len() > 0 {
+						ab = append(ab, sb.String())
+						sb.Reset()
+					}
+					continue
+				}
+
+				if input[i] == '"' {
+					inDoubleQuote = true
+					continue
+				}
+
+				if input[i] == '\'' {
+					inSingleQuote = true
+					continue
+				}
+
+				char := fmt.Sprintf("%c", input[i])
+				sb.WriteString(char)
+			}
+
+			if inSingleQuote {
+				if input[i] == '\'' {
+					if i+1 < len(input) && input[i+1] == '\'' {
+						inSingleQuote = false
+						continue
+					}
+					ab = append(ab, sb.String())
+					sb.Reset()
+					inSingleQuote = false
+					continue
+				}
+
+				char := fmt.Sprintf("%c", input[i])
+				sb.WriteString(char)
+			}
+
+			if inDoubleQuote {
+				if input[i] == '\\' {
+					switch input[i+1] {
+					case '\\', '$', '"', '\n':
+						continue
+					}
+				}
+
+				if input[i] == '"' {
+					if i+1 < len(input) && input[i+1] == '"' {
+						inDoubleQuote = false
+						continue
+					}
+					ab = append(ab, sb.String())
+					sb.Reset()
+					inDoubleQuote = false
+					continue
+				}
+
+				char := fmt.Sprintf("%c", input[i])
+				sb.WriteString(char)
+			}
+		}
+
+		cmd := strings.ToLower(ab[0])
+		if len(ab) > 1 {
+			args = ab[1:]
+		}
 
 		if cmd == "exit" && len(args) == 1 {
 			code, err := strconv.Atoi(args[0])
 			if err != nil {
-				fmt.Print(err)
+				code = 0
 			}
 			os.Exit(code)
 		} else if cmd == "echo" && len(args) > 1 {
@@ -126,7 +195,7 @@ func main() {
 			command := exec.Command(cmd, args...)
 			out, err := command.Output()
 			if err != nil {
-				fmt.Printf("%s: command not found", input)
+				fmt.Printf("%s: command not found", cmd)
 			} else {
 				fmt.Print(strings.Trim(string(out), "\n"))
 			}
