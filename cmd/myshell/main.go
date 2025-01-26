@@ -46,94 +46,110 @@ func main() {
 			return
 		}
 
+		const (
+			StateNormal = iota
+			StateSingleQuote
+			StateDoubleQuote
+			StateEscaped
+		)
+
+		var words []string
+		start := 0
+		state := StateNormal
+		previousState := StateNormal
+		collected := ""
+		i := 0
+		for i < len(input) {
+			r := input[i]
+			switch state {
+			case StateNormal:
+				switch r {
+				case '\'':
+					start = i + 1
+					state = StateSingleQuote
+				case '"':
+					start = i + 1
+					state = StateDoubleQuote
+				case '\\':
+					state = StateEscaped
+					previousState = StateNormal
+				case ' ', '\n':
+					word := collected + input[start:i]
+					if len(strings.TrimSpace(word)) != 0 {
+						words = append(words, word)
+					}
+					start = i + 1
+					collected = ""
+				}
+				i++
+
+			case StateSingleQuote:
+				if r == '\'' {
+					collected = collected + input[start:i]
+					start = i + 1
+					state = StateNormal
+				}
+				i++
+
+			case StateDoubleQuote:
+				if r == '\\' {
+					state = StateEscaped
+					previousState = StateDoubleQuote
+				}
+				if r == '"' {
+					collected = collected + input[start:i]
+					start = i + 1
+					state = StateNormal
+				}
+				i++
+
+			case StateEscaped:
+				if r == 'n' {
+					if previousState == StateNormal {
+						collected = collected + input[start:i-1] + "n"
+					} else {
+						collected = collected + input[start:i-1] + "\\n"
+					}
+					start = i + 1
+				}
+				if r == '\'' {
+					if previousState == StateNormal {
+						collected = collected + input[start:i-1]
+						start = i
+						i++
+					}
+				}
+				if r == ' ' || r == '\\' || r == '"' || r == '$' {
+					collected = collected + input[start:i-1]
+					start = i
+					i++
+				}
+				state = previousState
+			}
+		}
+
+		// Add final word
+		if start < len(input) {
+			words = append(words, input[start:])
+		}
+
 		var args []string
-		var escaped bool
-		var inSingleQuote bool
-		var inDoubleQuote bool
-		var sb strings.Builder
-		var ab []string
-		for i := 0; i < len(input); i++ {
-			if !inSingleQuote && !inDoubleQuote {
-				if !escaped && (input[i] == ' ' || input[i] == '\n') {
-					if sb.Len() > 0 {
-						ab = append(ab, sb.String())
-						sb.Reset()
-					}
-					continue
-				}
-
-				if input[i] == '"' && !escaped {
-					inDoubleQuote = true
-					continue
-				}
-
-				if input[i] == '\'' && !escaped {
-					inSingleQuote = true
-					continue
-				}
-
-				if input[i] == '\\' && !escaped {
-					escaped = true
-					continue
-				}
-
-				char := fmt.Sprintf("%c", input[i])
-				sb.WriteString(char)
-				escaped = false
-			}
-
-			if inSingleQuote {
-				if input[i] == '\'' {
-					if i+1 < len(input) && input[i+1] == '\'' {
-						inSingleQuote = false
-						continue
-					}
-					ab = append(ab, sb.String())
-					sb.Reset()
-					inSingleQuote = false
-					continue
-				}
-
-				char := fmt.Sprintf("%c", input[i])
-				sb.WriteString(char)
-			}
-
-			if inDoubleQuote {
-				if input[i] == '\\' {
-					switch input[i+1] {
-					case '\\', '$', '"', '\n':
-						continue
-					}
-				}
-
-				if input[i] == '"' {
-					if i+1 < len(input) && input[i+1] == '"' {
-						inDoubleQuote = false
-						continue
-					}
-					ab = append(ab, sb.String())
-					sb.Reset()
-					inDoubleQuote = false
-					continue
-				}
-
-				char := fmt.Sprintf("%c", input[i])
-				sb.WriteString(char)
-			}
+		cmd := strings.ToLower(words[0])
+		if len(words) > 1 {
+			args = words[1:]
 		}
 
-		cmd := strings.ToLower(ab[0])
-		if len(ab) > 1 {
-			args = ab[1:]
-		}
-
-		if cmd == "exit" && len(args) == 1 {
-			code, err := strconv.Atoi(args[0])
-			if err != nil {
-				code = 0
+		if cmd == "exit" {
+			code := 0
+			var err error
+			if len(args) == 1 {
+				code, err = strconv.Atoi(args[0])
+				if err != nil {
+					code = 0
+				}
 			}
 			os.Exit(code)
-		} else if cmd == "echo" && len(args) > 1 {
+		} else if cmd == "echo" && len(args) > 0 {
 			fmt.Print(strings.Join(args, " "))
 			fmt.Println()
 		} else if cmd == "type" && len(args) == 1 {
@@ -180,9 +196,17 @@ func main() {
 				fmt.Println()
 			}
 		} else {
-			command := exec.Command(cmd, args...)
+			escapedArgs := make([]string, len(args))
+			for i, arg := range args {
+				escapedArgs[i] = strings.ReplaceAll(arg, "\n", "\\n")
+			}
+			command := exec.Command(cmd, escapedArgs...)
 			out, err := command.Output()
 			if err != nil {
+				if cmd == "cat" {
+					fmt.Println(args)
+					fmt.Println(escapedArgs)
+				}
 				fmt.Printf("%s: command not found", cmd)
 			} else {
 				fmt.Print(strings.Trim(string(out), "\n"))
