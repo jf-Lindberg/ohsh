@@ -22,6 +22,7 @@ func main() {
 
 		argIsRedirectFile := false
 		redirectFileName := ""
+		shouldAppend := false
 		var redirectFile *os.File
 		for shell.position < len(input) {
 			r := input[shell.position]
@@ -33,6 +34,7 @@ func main() {
 				case '\\':
 					shell.enterEscaped()
 				case '>':
+					shouldAppend = shell.position+1 < len(input) && input[shell.position+1] == '>'
 					validRedirect := shell.handleRedirect(input[shell.position-1])
 					parser.addToCollected(input[shell.tokenStart:shell.position])
 					if validRedirect {
@@ -48,14 +50,22 @@ func main() {
 
 					argIsRedirectFile = true
 					shell.incrementPosition()
+					if shouldAppend {
+						shell.incrementPosition()
+					}
 					shell.setTokenStartToPosition()
 				case ' ', '\n':
 					token := strings.TrimSpace(parser.collected + input[shell.tokenStart:shell.position])
 					if len(token) != 0 {
 						if argIsRedirectFile {
 							redirectFileName = token
-							redirectFile, err = os.Create(redirectFileName)
+							if shouldAppend {
+								redirectFile, err = os.OpenFile(redirectFileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+							} else {
+								redirectFile, err = os.Create(redirectFileName)
+							}
 							if err != nil {
+								fmt.Println(err)
 							}
 							argIsRedirectFile = false
 						} else {
