@@ -33,6 +33,19 @@ func main() {
 				case '\\':
 					shell.enterEscaped()
 				case '>':
+					validRedirect := shell.handleRedirect(input[shell.position-1])
+					parser.addToCollected(input[shell.tokenStart:shell.position])
+					if validRedirect {
+						collected := parser.collected
+						parser.resetCollected()
+						parser.addToCollected(collected[:len(collected)-1])
+					}
+
+					if strings.TrimSpace(parser.collected) != "" {
+						parser.appendToken(parser.collected)
+						parser.resetCollected()
+					}
+
 					argIsRedirectFile = true
 					shell.incrementPosition()
 					shell.setTokenStartToPosition()
@@ -96,17 +109,31 @@ func main() {
 
 		output, errOutput, err := shell.handleCommand(cmd, args)
 
-		if errOutput != "" {
-			fmt.Print(errOutput)
-		}
+		if shell.redirectTo == StdOut {
+			if errOutput != "" {
+				fmt.Print(errOutput)
+			}
 
-		if redirectFile != nil && output != "" {
 			_, err := redirectFile.WriteString(output)
 			if err != nil {
 				return
 			}
-		} else if output != "" {
-			fmt.Print(output)
+		} else if shell.redirectTo == StdErr {
+			if output != "" {
+				fmt.Print(output)
+			}
+
+			_, err := redirectFile.WriteString(errOutput)
+			if err != nil {
+				return
+			}
+		} else {
+			if errOutput != "" {
+				fmt.Print(errOutput)
+			}
+			if output != "" {
+				fmt.Print(output)
+			}
 		}
 	}
 }

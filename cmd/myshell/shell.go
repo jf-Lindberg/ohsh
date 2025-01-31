@@ -21,6 +21,14 @@ const (
 	Escaped
 )
 
+type RedirectLocation int
+
+const (
+	Nowhere RedirectLocation = iota
+	StdOut
+	StdErr
+)
+
 // Eventually the shell should have a "start" function, beginning the main REPL
 type shell struct {
 	name          string
@@ -28,10 +36,7 @@ type shell struct {
 	previousState ShellState
 	position      int
 	tokenStart    int
-}
-
-type query struct {
-	redirectFile *os.File
+	redirectTo    RedirectLocation
 }
 
 func newShell(name string) *shell {
@@ -41,6 +46,7 @@ func newShell(name string) *shell {
 		previousState: Normal,
 		position:      0,
 		tokenStart:    0,
+		redirectTo:    Nowhere,
 	}
 }
 
@@ -120,6 +126,21 @@ func (s *shell) offsetTokenStartAgainstPosition(n int) {
 
 func (s *shell) setTokenStartToPosition() {
 	s.offsetTokenStartAgainstPosition(0)
+}
+
+func (s *shell) handleRedirect(prefix byte) bool {
+	if prefix == '1' {
+		s.redirectTo = StdOut
+		return true
+	}
+
+	if prefix == '2' {
+		s.redirectTo = StdErr
+		return true
+	}
+
+	s.redirectTo = StdOut
+	return false
 }
 
 // Commands
