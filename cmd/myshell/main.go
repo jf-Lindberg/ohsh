@@ -2,42 +2,16 @@ package main
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
-	"io/fs"
 	"os"
-	"os/exec"
-	"path/filepath"
-	"strconv"
 	"strings"
 )
 
-func findInPath(path string, name string) (string, error) {
-	var foundPath string
-	err := filepath.WalkDir(path, func(s string, d fs.DirEntry, e error) error {
-		if e != nil {
-			return e
-		}
-		if d.Name() == name {
-			foundPath = s
-			return filepath.SkipAll
-		}
-		return nil
-	})
-
-	if err != nil {
-		return "", err
-	}
-
-	if foundPath == "" {
-		return "", errors.New("not found")
-	}
-
-	return foundPath, nil
-}
-
 func main() {
 	for {
+		shell := newShell("ohsh")
+		parser := newParser()
+
 		fmt.Print("$ ")
 
 		// Wait for user input
@@ -46,172 +20,93 @@ func main() {
 			return
 		}
 
-		const (
-			StateNormal = iota
-			StateSingleQuote
-			StateDoubleQuote
-			StateEscaped
-		)
-
-		var words []string
-		start := 0
-		state := StateNormal
-		previousState := StateNormal
-		collected := ""
-		i := 0
-		for i < len(input) {
-			r := input[i]
-			switch state {
-			case StateNormal:
+		argIsRedirectFile := false
+		redirectFileName := ""
+		var redirectFile *os.File
+		for shell.position < len(input) {
+			r := input[shell.position]
+			switch shell.state {
+			case Normal:
 				switch r {
-				case '\'':
-					start = i + 1
-					state = StateSingleQuote
-				case '"':
-					start = i + 1
-					state = StateDoubleQuote
+				case '\'', '"':
+					shell.offsetTokenStartAgainstPosition(shell.enterQuotedString(r))
 				case '\\':
-					state = StateEscaped
-					previousState = StateNormal
+					shell.enterEscaped()
+				case '>':
+					argIsRedirectFile = true
+					shell.incrementPosition()
+					shell.setTokenStartToPosition()
 				case ' ', '\n':
-					word := collected + input[start:i]
-					if len(strings.TrimSpace(word)) != 0 {
-						words = append(words, word)
+					token := strings.TrimSpace(parser.collected + input[shell.tokenStart:shell.position])
+					if len(token) != 0 {
+						if argIsRedirectFile {
+							redirectFileName = token
+							redirectFile, err = os.Create(redirectFileName)
+							if err != nil {
+							}
+							argIsRedirectFile = false
+						} else {
+							parser.appendToken(token)
+						}
 					}
-					start = i + 1
-					collected = ""
+					shell.offsetTokenStartAgainstPosition(1)
+					parser.resetCollected()
 				}
-				i++
+				shell.incrementPosition()
 
-			case StateSingleQuote:
+			case SingleQuote:
 				if r == '\'' {
-					collected = collected + input[start:i]
-					start = i + 1
-					state = StateNormal
+					parser.addToCollected(input[shell.tokenStart:shell.position])
+					shell.offsetTokenStartAgainstPosition(shell.exitQuotedString())
 				}
-				i++
+				shell.incrementPosition()
 
-			case StateDoubleQuote:
+			case DoubleQuote:
 				if r == '\\' {
-					state = StateEscaped
-					previousState = StateDoubleQuote
+					shell.enterEscaped()
 				}
 				if r == '"' {
-					collected = collected + input[start:i]
-					start = i + 1
-					state = StateNormal
+					parser.addToCollected(input[shell.tokenStart:shell.position])
+					shell.offsetTokenStartAgainstPosition(shell.exitQuotedString())
 				}
-				i++
+				shell.incrementPosition()
 
-			case StateEscaped:
-				if r == 'n' {
-					if previousState == StateNormal {
-						collected = collected + input[start:i-1] + "n"
-					} else {
-						collected = collected + input[start:i-1] + "\\n"
-					}
-					start = i + 1
+			case Escaped:
+				addition, offset := shell.handleEscapedChar(r)
+				parser.addToCollected(input[shell.tokenStart:shell.position-1] + addition)
+				shell.offsetTokenStartAgainstPosition(offset)
+				if offset == 0 {
+					// All chars with offset 0 should be skipped
+					shell.incrementPosition()
 				}
-				if r == '\'' {
-					if previousState == StateNormal {
-						collected = collected + input[start:i-1]
-						start = i
-						i++
-					}
-				}
-				if r == ' ' || r == '\\' || r == '"' || r == '$' {
-					collected = collected + input[start:i-1]
-					start = i
-					i++
-				}
-				state = previousState
+				shell.exitEscaped()
 			}
 		}
 
-		// Add final word
-		if start < len(input) {
-			words = append(words, input[start:])
+		if shell.tokenStart < len(input) {
+			parser.appendToken(input[shell.tokenStart:])
 		}
 
 		var args []string
-		cmd := strings.ToLower(words[0])
-		if len(words) > 1 {
-			args = words[1:]
+		var tokens = parser.tokens
+		cmd := strings.ToLower(tokens[0])
+		if len(tokens) > 1 {
+			args = tokens[1:]
 		}
 
-		if cmd == "exit" {
-			code := 0
-			var err error
-			if len(args) == 1 {
-				code, err = strconv.Atoi(args[0])
-				if err != nil {
-					code = 0
-				}
-			}
-			os.Exit(code)
-		} else if cmd == "echo" && len(args) > 0 {
-			fmt.Print(strings.Join(args, " "))
-			fmt.Println()
-		} else if cmd == "type" && len(args) == 1 {
-			switch args[0] {
-			case "exit", "echo", "type", "pwd", "cd":
-				fmt.Printf("%s is a shell builtin", args[0])
-				fmt.Println()
-			default:
-				path := os.Getenv("PATH")
-				splitPath := strings.Split(path, ":")
-				found := false
-				for _, dir := range splitPath {
-					foundPath, err := findInPath(dir, args[0])
-					if err == nil {
-						fmt.Print(foundPath)
-						found = true
-						break
-					}
-				}
-				if !found {
-					fmt.Printf("%s not found", args[0])
-				}
-				fmt.Println()
-			}
-		} else if cmd == "pwd" {
-			pwd, err := os.Getwd()
+		output, errOutput, err := shell.handleCommand(cmd, args)
+
+		if errOutput != "" {
+			fmt.Print(errOutput)
+		}
+
+		if redirectFile != nil && output != "" {
+			_, err := redirectFile.WriteString(output)
 			if err != nil {
-				fmt.Println(err)
-				os.Exit(1)
+				return
 			}
-			fmt.Print(pwd)
-			fmt.Println()
-		} else if cmd == "cd" {
-			err = nil
-			dir := args[0]
-			if dir == "~" {
-				home := os.Getenv("HOME")
-				err = os.Chdir(home)
-			} else {
-				err = os.Chdir(dir)
-			}
-			if err != nil {
-				fmt.Printf("cd: %s: No such file or directory", args[0])
-				fmt.Println()
-			}
-		} else {
-			escapedArgs := make([]string, len(args))
-			for i, arg := range args {
-				escapedArgs[i] = strings.ReplaceAll(arg, "\n", "\\n")
-			}
-			command := exec.Command(cmd, escapedArgs...)
-			out, err := command.Output()
-			if err != nil {
-				if cmd == "cat" {
-					fmt.Println(args)
-					fmt.Println(escapedArgs)
-				}
-				fmt.Printf("%s: command not found", cmd)
-			} else {
-				fmt.Print(strings.Trim(string(out), "\n"))
-			}
-			fmt.Println()
+		} else if output != "" {
+			fmt.Print(output)
 		}
 	}
 }

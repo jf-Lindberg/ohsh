@@ -1,0 +1,1 @@
+/Users/filiplindberg/dev/codecrafters-shell-go/tmp/bar

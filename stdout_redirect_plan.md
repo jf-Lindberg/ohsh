@@ -1,0 +1,3 @@
+- Save redirect file reference in variable
+- If redirect file reference exists, redirect output of command there, else print
+- This requires command logic to use returns instead of fmt.Prints!

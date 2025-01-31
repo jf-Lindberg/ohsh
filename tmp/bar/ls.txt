@@ -1,0 +1,7 @@
+f'\'38
+f\86
+f\n57
+foo.txt
+fool.txt
+haha.txt
+ls.txt
