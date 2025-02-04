@@ -32,13 +32,18 @@ func readInput(builtins []string) (string, error) {
 			}
 		case 9: // Tab
 			word := string(input)
+			found := false
 			for i := range builtins {
 				fullCmd := builtins[i]
 				if strings.HasPrefix(fullCmd, word) {
 					input = append(append(input, []rune(fullCmd[len(word):])...), ' ')
 					fmt.Print(builtins[i][len(word):] + " ")
 					pos += len(fullCmd) - len(word) + 1 // +1 for the space
+					found = true
 				}
+			}
+			if !found {
+				fmt.Print("\a")
 			}
 		case 13, 10: // Enter
 			fmt.Print("\r\n")
