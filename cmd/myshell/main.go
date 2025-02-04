@@ -36,8 +36,8 @@ func readInput(builtins []string) (string, error) {
 				fullCmd := builtins[i]
 				if strings.HasPrefix(fullCmd, word) {
 					input = append(append(input, []rune(fullCmd[len(word):])...), ' ')
-					pos += len(fullCmd) - len(word)
 					fmt.Print(builtins[i][len(word):] + " ")
+					pos += len(fullCmd) - len(word) + 1 // +1 for the space
 				}
 			}
 		case 13, 10: // Enter
