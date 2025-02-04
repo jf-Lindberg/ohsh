@@ -147,7 +147,11 @@ func (s *shell) handleRedirect(prefix byte) bool {
 func (s *shell) handleCommand(command string, args []string) (string, string, error) {
 	switch command {
 	case "exit":
-		s.handleExit(args[0])
+		code := "0"
+		if len(args) > 0 {
+			code = args[0]
+		}
+		s.handleExit(code)
 		return "", "", nil
 	case "echo":
 		return s.handleEcho(args), "", nil
