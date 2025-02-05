@@ -4,12 +4,49 @@ import (
 	"fmt"
 	"golang.org/x/term"
 	"os"
+	"sort"
 	"strings"
 )
 
 var oldState *term.State
 
-func readInput(builtins []string) (string, error) {
+func getExternals() ([]string, error) {
+	pathEnv := os.Getenv("PATH")
+	paths := strings.Split(pathEnv, string(os.PathListSeparator))
+
+	seen := make(map[string]bool)
+	var executables []string
+
+	for _, dir := range paths {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+
+			info, err := entry.Info()
+			if err != nil {
+				continue
+			}
+
+			if info.Mode()&0111 != 0 {
+				if !seen[entry.Name()] {
+					seen[entry.Name()] = true
+					executables = append(executables, entry.Name())
+				}
+			}
+		}
+	}
+
+	sort.Strings(executables)
+	return executables, nil
+}
+
+func readInput(builtins []string, externals []string) (string, error) {
 	var input []rune
 	var pos int
 	for {
@@ -40,6 +77,19 @@ func readInput(builtins []string) (string, error) {
 					fmt.Print(builtins[i][len(word):] + " ")
 					pos += len(fullCmd) - len(word) + 1 // +1 for the space
 					found = true
+					break
+				}
+			}
+			if !found {
+				for i := range externals {
+					fullCmd := externals[i]
+					if strings.HasPrefix(fullCmd, word) {
+						input = append(append(input, []rune(fullCmd[len(word):])...), ' ')
+						fmt.Print(externals[i][len(word):] + " ")
+						pos += len(fullCmd) - len(word) + 1 // +1 for the space
+						found = true
+						break
+					}
 				}
 			}
 			if !found {
@@ -88,10 +138,17 @@ func main() {
 	// switch stdin into 'raw' mode
 	for {
 		builtins := [4]string{"type", "echo", "exit", "pwd"}
+
+		externals, err := getExternals()
+		if err != nil {
+			fmt.Println("get externals error")
+			os.Exit(1)
+		}
 		shell := newShell("ohsh")
 		parser := newParser()
 
-		input, err := readInput(builtins[:])
+		var input string
+		input, err = readInput(builtins[:], externals)
 		if input == "" {
 			fmt.Print("\r$ ")
 			continue
@@ -197,7 +254,6 @@ func main() {
 		}
 
 		term.Restore(int(os.Stdin.Fd()), oldState)
-		// Carriage returns doesnt work properly when the output has multiple lines
 		output, errOutput, err := shell.handleCommand(cmd, args)
 
 		if shell.redirectTo == StdOut {
