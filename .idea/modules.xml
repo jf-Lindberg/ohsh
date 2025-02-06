@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/codecrafters-shell-go.iml" filepath="$PROJECT_DIR$/.idea/codecrafters-shell-go.iml" />
+      <module fileurl="file://$PROJECT_DIR$/codecrafters-shell-go.iml" filepath="$PROJECT_DIR$/codecrafters-shell-go.iml" />
     </modules>
   </component>
 </project>

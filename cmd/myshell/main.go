@@ -8,6 +8,7 @@ import (
 	"strings"
 )
 
+var autocompleted bool
 var oldState *term.State
 
 func getExternals() ([]string, error) {
@@ -69,6 +70,7 @@ func readInput(builtins []string, externals []string) (string, error) {
 			}
 		case 9: // Tab
 			word := string(input)
+			var autocompletions []string
 			found := false
 			for i := range builtins {
 				fullCmd := builtins[i]
@@ -84,17 +86,37 @@ func readInput(builtins []string, externals []string) (string, error) {
 				for i := range externals {
 					fullCmd := externals[i]
 					if strings.HasPrefix(fullCmd, word) {
-						input = append(append(input, []rune(fullCmd[len(word):])...), ' ')
-						fmt.Print(externals[i][len(word):] + " ")
-						pos += len(fullCmd) - len(word) + 1 // +1 for the space
-						found = true
-						break
+						autocompletions = append(autocompletions, fullCmd)
 					}
 				}
+				if len(autocompletions) > 1 {
+					if !autocompleted {
+						fmt.Print("\a")
+						autocompleted = true
+						break
+					}
+					fmt.Print("\n\r")
+					for i := range autocompletions {
+						if i > 0 {
+							fmt.Print("  ")
+						}
+						fmt.Print(autocompletions[i])
+					}
+					fmt.Print("\n")
+					fmt.Print("\r$ ")
+					fmt.Print(string(input))
+					pos = len(input)
+				}
+				if len(autocompletions) == 1 {
+					input = append(append(input, []rune(autocompletions[0])...), ' ')
+					fmt.Print(autocompletions[0][len(word):] + " ")
+					pos += len(autocompletions[0]) - len(word) + 1 // +1 for the space
+				}
+				if len(autocompletions) == 0 {
+					fmt.Print("\a")
+				}
 			}
-			if !found {
-				fmt.Print("\a")
-			}
+
 		case 13, 10: // Enter
 			fmt.Print("\r\n")
 			return string(input), nil
@@ -137,9 +159,8 @@ func main() {
 	//	- maybe environment (handling dirs etc)
 	// switch stdin into 'raw' mode
 	for {
-		builtins := [4]string{"type", "echo", "exit", "pwd"}
-
-		externals, err := getExternals()
+		builtins := []string{"type", "echo", "exit", "pwd"}
+		externals, err := getExternals() // can probably just append builtins to PATH?
 		if err != nil {
 			fmt.Println("get externals error")
 			os.Exit(1)
@@ -148,7 +169,7 @@ func main() {
 		parser := newParser()
 
 		var input string
-		input, err = readInput(builtins[:], externals)
+		input, err = readInput(builtins, externals)
 		if input == "" {
 			fmt.Print("\r$ ")
 			continue
