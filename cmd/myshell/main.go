@@ -11,6 +11,26 @@ import (
 var autocompleted bool
 var oldState *term.State
 
+func longestCommonPrefix(strs []string) string {
+	var longestPrefix string = ""
+	var endPrefix = false
+
+	if len(strs) > 0 {
+		sort.Strings(strs)
+		first := string(strs[0])
+		last := string(strs[len(strs)-1])
+
+		for i := 0; i < len(first); i++ {
+			if !endPrefix && string(last[i]) == string(first[i]) {
+				longestPrefix += string(last[i])
+			} else {
+				endPrefix = true
+			}
+		}
+	}
+	return longestPrefix
+}
+
 func getExternals() ([]string, error) {
 	pathEnv := os.Getenv("PATH")
 	paths := strings.Split(pathEnv, string(os.PathListSeparator))
@@ -90,11 +110,20 @@ func readInput(builtins []string, externals []string) (string, error) {
 					}
 				}
 				if len(autocompletions) > 1 {
+					prefix := longestCommonPrefix(autocompletions)
+					if prefix == "" || prefix != word || len(prefix) > len(word) {
+						input = append(append(input, []rune(prefix[len(word):])...))
+						fmt.Print(prefix[len(word):])
+						pos += len(prefix) - len(word)
+						break
+					}
+
 					if !autocompleted {
 						fmt.Print("\a")
 						autocompleted = true
 						break
 					}
+
 					fmt.Print("\n\r")
 					for i := range autocompletions {
 						if i > 0 {
